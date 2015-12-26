@@ -6,14 +6,15 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 )
 
-var command = flag.String("command", "", "The command to use")
+var command = flag.String("command", "main.exe", "The command to use")
 var tsc0Start = flag.Int("start", 0, "Starting TSC0")
 var tsc0End = flag.Int("end", 255, "End TSC0 (inclusive)")
-var numKeyCandidates = flag.Int("num_candidates", 0, "Number of candidates to generate")
-var template = flag.String("template", "", "Package template file")
-var capFile = flag.String("cap_file", "", "Capture file prefix, assumption: file for $tsc0 is at ($cap_file)_$tsc0")
+var numKeyCandidates = flag.Int("num_candidates", 100, "Number of candidates to generate")
+var template = flag.String("template", "sniff_data/template", "Package template file")
+var capFile = flag.String("cap_file", "sniff_data/data_dump_", "Capture file prefix, assumption: file for $tsc0 is at ($cap_file)_$tsc0")
 var numProcs = flag.Int("procs", 4, "total number of processes to use")
 
 type Result struct {
@@ -28,9 +29,17 @@ func main() {
 	wait := make(chan bool, *numProcs)
 	results := make(chan Result)
 
+	fmt.Printf("Running command \"%s\" from tsc0=%d to tsc0=%d\n", *command, *tsc0Start, *tsc0End)
+	fmt.Printf("Generating %d candidates\n", *numKeyCandidates)
+	fmt.Printf("Utilizing %d processes at the same time\n", *numProcs)
+	fmt.Printf("Reading from template '%s' and capFile '%s'\n", *template, *capFile)
+
+	sampleCmd := createCommand(*tsc0Start)
+	fmt.Printf("Sample invocation: \n\t %s \n", strings.Join(sampleCmd.Args, " "))
+
 	for tsc0 := *tsc0Start; tsc0 <= *tsc0End; tsc0++ {
 		go func(tsc0 int) {
-			cmd := createCommand(*command, tsc0, *numKeyCandidates, *template, *capFile)
+			cmd := createCommand(tsc0)
 			wait <- true
 			out, err := cmd.Output()
 			if err != nil {
@@ -59,7 +68,7 @@ func main() {
 	fmt.Println("")
 }
 
-func createCommand(name string, tsc0 int, numKeyCandidates int, template string, capFilePref string) *exec.Cmd {
-	dataFile := fmt.Sprintf("%s_%d", tsc0)
-	return exec.Command(name, strconv.Itoa(tsc0), strconv.Itoa(numKeyCandidates), dataFile, template)
+func createCommand(tsc0 int) *exec.Cmd {
+	dataFile := fmt.Sprintf("%s%d", *capFile, tsc0)
+	return exec.Command(*command, strconv.Itoa(tsc0), strconv.Itoa(*numKeyCandidates), dataFile, *template)
 }
